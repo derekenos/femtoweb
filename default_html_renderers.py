@@ -1,5 +1,5 @@
 
-import os
+from lib._os import path
 
 
 def HTMLDocument(head, body):
@@ -27,7 +27,7 @@ def Banner(text):
 
 
 def TextFileEditor(fs_path, text):
-    filename = os.path.split(fs_path)[-1]
+    filename = path.split(fs_path)[-1]
     head = """
     <script>
       document.addEventListener('DOMContentLoaded', () => {{

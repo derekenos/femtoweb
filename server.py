@@ -4,7 +4,6 @@ import re
 import socket
 import sys
 from collections import namedtuple
-from traceback import print_exc as print_exc
 
 
 ###############################################################################
@@ -222,11 +221,11 @@ def service_connection(s, conn, addr):
         s.close()
         raise
     except Exception as e:
-        print_exc()
+        sys.print_exception(e)
         try:
             send(conn, _500(str(e)))
         except Exception as e:
-            print_exc()
+            sys.print_exception(e)
         conn.close()
 
 

@@ -2,8 +2,10 @@ import os
 import gc
 from binascii import hexlify
 
-import default_html_renderers as renderers
-from server import (
+from lib._os import path
+
+from . import default_html_renderers as renderers
+from .server import (
     APPLICATION_JSON,
     APPLICATION_PYTHON,
     DELETE,
@@ -38,16 +40,16 @@ EDITABLE_CONTENT_TYPES = (
 def _fs_GET(fs_path):
     """Handle a filesystem GET request.
     """
-    if not os.path.exists(fs_path):
+    if not path.exists(fs_path):
         return _404()
 
-    if os.path.isdir(fs_path):
+    if path.isdir(fs_path):
         # Return the directory listing
         filenames = os.listdir(fs_path)
         body = ''
         for filename in filenames:
-            _fs_path = os.path.join(fs_path, filename)
-            is_dir = os.path.isdir(_fs_path)
+            _fs_path = path.join(fs_path, filename)
+            is_dir = path.isdir(_fs_path)
             body += (
                 '<div>'
                 '  <a href="/_fs{}" '
@@ -71,7 +73,7 @@ def _fs_GET(fs_path):
 
 
 def _fs_GET_edit(fs_path, create):
-    if os.path.exists(fs_path):
+    if path.exists(fs_path):
         text = open(fs_path, 'rb').read().decode('utf-8')
     elif not create:
         return _404()
@@ -119,7 +121,7 @@ def _fs_PUT(fs_path, request):
 def _fs_DELETE(fs_path):
     """Handle a filesystem DELETE request.
     """
-    if not os.path.exists(fs_path):
+    if not path.exists(fs_path):
         return _404()
     os.remove(fs_path)
     return _200()
@@ -144,4 +146,3 @@ def filesystem(request):
 
     elif request.method == 'DELETE':
         return _fs_DELETE(fs_path)
-
