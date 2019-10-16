@@ -53,3 +53,69 @@ Now when you surf over to `http://localhost:8000/` you should see:
 Hello from femtoweb!
 ```
 
+## The Features
+
+### routing
+
+Registering a function as the handler for requests to a certain URL path is accomplished using the [route](https://github.com/derekenos/femtoweb/blob/master/server.py#L285) decorator.
+
+It's used like this:
+```
+@route(<path_regex_string>, methods=(<method>, ...))
+def handler(request):
+   ... fun stuff ...
+   return <Response>
+```
+Where:
+- `path_regex_string` is a regular expression string that will be used to match against the request path. Note that if you do not specifying a leading `^` or trailing `$`, [both will be automatically added for you](https://github.com/derekenos/femtoweb/blob/master/server.py#L293-L296).
+- `method` is one of [DELETE, GET, POST, PUT](https://github.com/derekenos/femtoweb/blob/master/server.py#L116-L119)
+- `Response` is a [Response](https://github.com/derekenos/femtoweb/blob/master/server.py#L28) object
+
+#### Notes
+
+The order in which you define routes matters.
+
+For example, if you define:
+```
+@route('.*', methods=(GET,))
+def catchall(request):
+    ...
+    
+@route('/', methods=(GET, POST))
+def home(request):
+    ...
+```
+A `GET` to `/` can not reach the `home` handler because the `catchall` handler was defined first and its path regex will match everything. A `POST` to `/`, however, will reach `home` because `catchall` only supports `GET`.
+
+You can also register routes with the same pattern.
+
+For example, `home` could be defined as two separate, method-specific functions with the same path regex:
+
+```
+@route('/', methods=(GET,))
+def home_GET(request):
+    ...
+
+@route('/', methods=(POST,))
+def home_POST(request):
+    ...
+```
+
+### as_json
+
+You can use the [`as_json` decorator](https://github.com/derekenos/femtoweb/blob/master/server.py#L317) in conjunction with `route` to automatically encode the `Response.body` as JSON, e.g.:
+
+```
+@route('/time', methods=(GET,))
+@as_json
+def get_time(request):
+   return _200(body={'currentTime': datetime.now().isoformat()})
+```
+
+This will make the `/time` endpoint respond with the body `{"currentTime": "2019-10-16T20:49:22.543090"}` and `Content-Type: application/json`.
+
+### CPU Hammer
+
+Not a feature, but please note that [this code](https://github.com/derekenos/femtoweb/blob/master/server.py#L243-L247) continually attempts to accept connections on a non-blocking socket, which I did to temporarily fix some throughput issues.
+
+
