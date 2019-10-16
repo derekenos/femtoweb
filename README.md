@@ -57,9 +57,8 @@ Hello from femtoweb!
 
 ### routing
 
-Registering a function as the handler for requests to a certain URL path is accomplished using the [route](https://github.com/derekenos/femtoweb/blob/master/server.py#L285) decorator.
+Registering a function as the handler for requests to a certain URL path is accomplished using the [route](https://github.com/derekenos/femtoweb/blob/master/server.py#L285) decorator:
 
-It's used like this:
 ```
 @route(<path_regex_string>, methods=(<method>, ...))
 def handler(request):
@@ -71,7 +70,7 @@ Where:
 - `method` is one of [DELETE, GET, POST, PUT](https://github.com/derekenos/femtoweb/blob/master/server.py#L116-L119)
 - `Response` is a [Response](https://github.com/derekenos/femtoweb/blob/master/server.py#L28) object
 
-#### Notes
+#### Order and Methods
 
 The order in which you define routes matters.
 
