@@ -87,9 +87,8 @@ def home(request):
 ```
 A `GET` to `/` can not reach the `home` handler because the `catchall` handler was defined first and its path regex will match everything. A `POST` to `/`, however, will reach `home` because `catchall` only supports `GET`.
 
-You can also register routes with the same pattern.
-
-For example, `home` could be defined as two separate, method-specific functions with the same path regex:
+You can also route the same pattern multple times but for different methods.
+For example, `home` could be split into two functions, one for `GET` and one for `POST`:
 
 ```
 @route('/', methods=(GET,))
