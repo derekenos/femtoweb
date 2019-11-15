@@ -2,7 +2,7 @@ import os
 import gc
 from binascii import hexlify
 
-from lib._os import path
+from ._os import path
 
 from . import default_html_renderers as renderers
 from .server import (
