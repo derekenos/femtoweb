@@ -144,4 +144,3 @@ def filesystem(request):
 
     elif request.method == 'DELETE':
         return _fs_DELETE(fs_path)
-
