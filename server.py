@@ -126,6 +126,56 @@ class HTTPServerException(Exception): pass
 
 class ShortRead(HTTPServerException): pass
 class ZeroRead(HTTPServerException): pass
+class CouldNotParse(HTTPServerException): pass
+
+
+###############################################################################
+# Query Parameter Parsers
+###############################################################################
+
+def parsing_error():
+    raise CouldNotParse
+
+
+def as_type(t):
+    def f(x):
+        # Prevent casting of None, which str() will happily do.
+        if x is None and t is not None:
+            parsing_error()
+        try:
+            return t(x)
+        except (TypeError, ValueError):
+            parsing_error()
+    return f
+
+
+def as_choice(*choices):
+    return lambda x: x if x in choices else parsing_error()
+
+
+def as_nonempty(parser):
+    def f(x):
+        x = parser(x)
+        return x if len(x) > 0 else parsing_error()
+    return f
+
+
+def as_with_default(parser, default):
+    def f(x):
+        try:
+            return parser(x)
+        except CouldNotParse:
+            return default
+    return f
+
+
+def as_maybe(parser):
+    def f(x):
+        try:
+            return parser(x)
+        except CouldNotParse:
+            return x if x is None else parsing_error()
+    return f
 
 
 ###############################################################################
@@ -139,13 +189,22 @@ _decode = lambda b: b.decode('ISO-8859-1')
 
 
 def parse_uri(uri):
-    if '?' in uri:
-        path, query_string = uri.split('?')
-        # TODO - URL unencoding
-        query = dict([kv.split('=') for kv in query_string.split('&')])
-    else:
-        path = uri
-        query = {}
+    if '?' not in uri:
+        return uri, {}
+    # TODO - URL unencoding
+    path, query_string = uri.split('?')
+    query = {}
+    for pair_str in query_string.split('&'):
+        kv = pair_str.split('=')
+        kv_len = len(kv)
+        if kv_len == 2:
+            k, v = kv
+            query[k] = v
+        elif kv_len == 1:
+            query[kv[0]] = None
+        else:
+            if DEBUG:
+                print('Unparsable query param: "{}"'.format(pair_str))
     return path, query
 
 
@@ -239,7 +298,7 @@ def serve():
     # Start listening for connections with a max buffer of 5 pending.
     s.listen(5)
     # Blocking mode was causing input timer period to be a constant 100mS?
-    s.setblocking(False)
+    s.setblocking(True)
 
     while True:
         try:
@@ -278,10 +337,10 @@ def send(connection, response):
 ###############################################################################
 
 # Define a module-level variable to store (<pathRegex>, <allowedMethods>,
-# <func>) tuples for functions decorated with @route.
-_path_regex_methods_handler_tuples = []
+# <query_param_parser_map>, <func>) tuples for functions decorated with @route.
+_routes = []
 
-def route(path_pattern, methods=('GET',)):
+def route(path_pattern, methods=('GET',), query_param_parser_map=None):
     """A decorator to register a function as the handler for requests to the
     specified path regex pattern and send any returned response.
     """
@@ -296,18 +355,15 @@ def route(path_pattern, methods=('GET',)):
         else:
             path_regex = re.compile(path_pattern)
 
-        def wrapper(request):
+        def wrapper(request, *args, **kwargs):
             """Invoke the request handler and send any response.
             """
-            response = func(request)
+            response = func(request, *args, **kwargs)
             if response is not None:
                 send(request.connection, response)
 
         # Register this wrapper for the path.
-        _path_regex_methods_handler_tuples.append(
-            (path_regex, methods, wrapper)
-        )
-
+        _routes.append((path_regex, methods, query_param_parser_map, wrapper))
         return wrapper
 
     return decorator
@@ -325,16 +381,44 @@ def as_json(func):
     return wrapper
 
 
+def parse_query_params(request, parser_map):
+    """Apply parsers to the request query params.
+    """
+    query = request.query
+    ok_params = {}
+    bad_params = {}
+    for k, parser in parser_map.items():
+        v = query.get(k)
+        try:
+            ok_params[k] = parser(v)
+        except CouldNotParse:
+            bad_params[k] = v
+    return ok_params, bad_params
+
+
 def dispatch(request):
     """Attempt to find and invoke the handler for the specified request path
     and return a bool indicating whether a handler was found.
     """
     any_path_matches = False
-    for regex, methods, func in _path_regex_methods_handler_tuples:
+    for regex, methods, query_param_parser_map, func in _routes:
         match = regex.match(request.path)
         any_path_matches |= match is not None
         if match and request.method in methods:
-            func(request)
+            if query_param_parser_map is None:
+                func(request)
+                return
+            ok_params, bad_params = parse_query_params(
+                request,
+                query_param_parser_map
+            )
+            if not bad_params:
+                func(request, **ok_params)
+            else:
+                send(
+                    request.connection,
+                    _400('invalid params: {}'.format(bad_params))
+                )
             return
 
     if any_path_matches:

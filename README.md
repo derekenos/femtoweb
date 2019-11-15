@@ -112,6 +112,47 @@ def get_time(request):
 
 This will make the `/time` endpoint respond with the body `{"currentTime": "2019-10-16T20:49:22.543090"}` and `Content-Type: application/json`.
 
+
+### File Operations
+
+`default_http_endpoints` implements a [/\_fs](https://github.com/derekenos/femtoweb/blob/master/default_http_endpoints.py#L128-L129) endpoint that supports file operations.
+
+#### GET Operations
+
+Currently, a `GET` to:
+
+- a directory-type object path will respond with a HTML list of `<a>` links to each contained item
+- a file-type object path will respond with the file itself, setting the response `Content-Type` as appropriate
+
+##### In-browser File Editor
+
+`default_html_renderers` defines a super-simple [TextFileEditor](https://github.com/derekenos/femtoweb/blob/master/default_html_renderers.py#L29-L72) in-browser editor for plain text files that you can access by specifying the `edit=1` URL arg, e.g.:
+`http://192.168.4.1/_fs/config.json?edit=1`
+
+Once you're done editing, you can click the `Submit` button or press `CTRL-Enter` to submit your changes, after which it will automatically redirect to the non-edit URL for the file.
+
+Note that:
+
+- You can create new files by also specifying `create=1`, e.g. `http://192.168.4.1/_fs/newfile.txt?edit=1&create=1`
+- No validation is currently performed on the submitted data, so if youre editing a JSON file and you submit something that isn't valid JSON, you won't know until your application tries to read it, and probably crashes.
+
+
+#### curl
+
+You can use `curl` to manipulate the filesystem from the command line:
+
+```
+# Create or update a file
+curl --upload-file file.txt http://192.168.4.1/_fs/file.txt
+
+# Get a file
+curl http://192.168.4.1/_fs/file.txt
+
+# Delete a file
+curl -X DELETE http://192.168.4.1/_fs/file.txt
+```
+
+
 ### CPU Hammer
 
 Not a feature, but please note that [this code](https://github.com/derekenos/femtoweb/blob/master/server.py#L243-L247) continually attempts to accept connections on a non-blocking socket, which I did to temporarily fix some throughput issues.
