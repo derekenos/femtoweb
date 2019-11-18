@@ -1,9 +1,13 @@
 
+import binascii
+import hashlib
 import json
 import re
 import socket
 import sys
 from collections import namedtuple
+
+from uwebsocket import websocket
 
 
 ###############################################################################
@@ -429,5 +433,43 @@ def dispatch(request):
         send(request.connection, _404())
 
 
+###############################################################################
+# Websockets
+###############################################################################
+
+def do_websocket_server_handshake(request):
+    """ Adapated from the websocket_helper.py:
+    https://github.com/micropython/webrepl/blob/master/websocket_helper.py
+    """
+    webkey = request.headers.get('Sec-WebSocket-Key')
+    if not webkey:
+        raise OSError("Not a websocket request")
+    respkey = bytes(webkey, 'ascii') + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    respkey = hashlib.sha1(respkey).digest()
+    respkey = binascii.b2a_base64(respkey)[:-1]
+    resp = b"""\
+HTTP/1.1 101 Switching Protocols\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Accept: %s\r
+\r
+""" % respkey
+    request.connection.send(resp)
+
+
+def as_websocket(func):
+    """An endpoint function decorator that performs a websocket handshake and
+    passes the websocket object as the second argument to the function.
+    """
+    def f(request, *args, **kwargs):
+        # Set the socket to non-blocking.
+        request.connection.setblocking(False)
+        do_websocket_server_handshake(request)
+        ws = websocket(request.connection, True)
+        return func(request, ws, *args, **kwargs)
+    return f
+
+
+# Run the server if executed as a script.
 if __name__ == '__main__':
     serve()
