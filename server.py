@@ -164,7 +164,7 @@ def as_nonempty(parser):
     return f
 
 
-def as_with_default(parser, default):
+def with_default_as(parser, default):
     def f(x):
         try:
             return parser(x)
@@ -173,7 +173,7 @@ def as_with_default(parser, default):
     return f
 
 
-def as_maybe(parser):
+def maybe_as(parser):
     def f(x):
         try:
             return parser(x)
