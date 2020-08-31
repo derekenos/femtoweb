@@ -5,9 +5,9 @@ from .server import (
     CouldNotParse,
     as_type,
     as_choice,
-    as_maybe,
+    maybe_as,
     as_nonempty,
-    as_with_default,
+    with_default_as,
 )
 
 
@@ -65,8 +65,8 @@ class Tester(TestCase):
                 self.assertEqual(parser(a), b)
 
 
-    def test_as_maybe(self):
-        parser = as_maybe(as_type(int))
+    def test_maybe_as(self):
+        parser = maybe_as(as_type(int))
         for a, b in (
                 (None, None),
                 ('', CouldNotParse),
@@ -99,8 +99,8 @@ class Tester(TestCase):
                 self.assertEqual(parser(a), b)
 
 
-    def test_as_with_default(self):
-        parser = as_with_default(as_type(int), 0)
+    def test_with_default_as(self):
+        parser = with_default_as(as_type(int), 0)
         for a, b in (
                 (None, 0),
                 ('', 0),
