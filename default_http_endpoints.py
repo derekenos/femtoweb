@@ -92,27 +92,26 @@ async def _fs_PUT(fs_path, request):
         request.writer.write('\r\n')
         await request.writer.drain()
 
-    async def chunker(max_size):
+    # TODO - write to a temporary file and rename to target on success.
+    MAX_CHUNK_BYTES = 1024
+    with open(fs_path, 'wb') as fh:
         bytes_remaining = int(request.headers['Content-Length'])
 
         # First yield from the body if non-empty.
         body = request.body
         while body:
-            chunk = body[:max_size]
-            body = body[max_size:]
-            yield chunk
+            chunk = body[:MAX_CHUNK_BYTES]
+            body = body[MAX_CHUNK_BYTES:]
+            fh.write(chunk)
             bytes_remaining -= len(chunk)
 
         # If we need more bytes, receive them from the socket.
         while bytes_remaining:
-            chunk = await request.reader.read(min(bytes_remaining, max_size))
-            yield chunk
-            bytes_remaining -= len(chunk)
-
-    # TODO - write to a temporary file and rename to target on success.
-    with open(fs_path, 'wb') as fh:
-        for chunk in chunker(1024):
+            chunk = await request.reader.read(
+                min(bytes_remaining, MAX_CHUNK_BYTES)
+            )
             fh.write(chunk)
+            bytes_remaining -= len(chunk)
 
     return _303(location='/_fs{}'.format(fs_path))
 
