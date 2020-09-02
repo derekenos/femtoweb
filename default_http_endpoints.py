@@ -20,7 +20,6 @@ from .server import (
     _503,
     as_json,
     route,
-    send,
     get_file_path_content_type,
 )
 
@@ -83,17 +82,17 @@ def _fs_GET_edit(fs_path, create):
     return _200(body=body)
 
 
-def _fs_PUT(fs_path, request):
+async def _fs_PUT(fs_path, request):
     """Handle a filesystem PUT request.
     """
     # TODO - validate the request (e.g. check for avail drive space, whether
     # directory already exists with same name, etc.))
-
     if request.headers.get('Expect') == '100-continue':
-        request.connection.write('HTTP/1.1 100 Continue\r\n')
-        request.connection.write('\r\n')
+        request.writer.write('HTTP/1.1 100 Continue\r\n')
+        request.writer.write('\r\n')
+        await request.writer.drain()
 
-    def chunker(max_size):
+    async def chunker(max_size):
         bytes_remaining = int(request.headers['Content-Length'])
 
         # First yield from the body if non-empty.
@@ -106,7 +105,7 @@ def _fs_PUT(fs_path, request):
 
         # If we need more bytes, receive them from the socket.
         while bytes_remaining:
-            chunk = request.connection.recv(min(bytes_remaining, max_size))
+            chunk = await request.reader.read(min(bytes_remaining, max_size))
             yield chunk
             bytes_remaining -= len(chunk)
 
@@ -128,7 +127,7 @@ def _fs_DELETE(fs_path):
 
 
 @route('^((/_fs/?)|(/_fs/.+))$', methods=(GET, PUT, DELETE))
-def filesystem(request):
+async def filesystem(request):
     """Handle filesystem operations.
     """
     fs_path = request.path[4:] or '/'
@@ -142,7 +141,7 @@ def filesystem(request):
             return _fs_GET(fs_path)
 
     elif request.method == 'PUT':
-        return _fs_PUT(fs_path, request)
+        return await _fs_PUT(fs_path, request)
 
     elif request.method == 'DELETE':
         return _fs_DELETE(fs_path)
