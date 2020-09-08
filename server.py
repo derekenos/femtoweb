@@ -5,7 +5,7 @@ import json
 import re
 import socket
 import sys
-import uasyncio
+import uasyncio as asyncio
 from collections import namedtuple
 from uwebsocket import websocket
 
@@ -293,7 +293,7 @@ async def service_connection(reader, writer):
 
 
 async def serve():
-    return await uasyncio.start_server(service_connection, '', 80, backlog=5)
+    return await asyncio.start_server(service_connection, '', 80, backlog=5)
 
 
 async def send(writer, response):
@@ -306,7 +306,7 @@ async def send(writer, response):
     await writer.drain()
 
     if response.body is not None:
-        if not hasattr(response.body, 'read'):
+        if not hasattr(response.body, 'readinto'):
             # Assume that body is a string and send it.
             writer.write(response.body.encode())
             await writer.drain()
@@ -314,12 +314,13 @@ async def send(writer, response):
             # Assume that body is a file-type object and iterate over it
             # sending each chunk to avoid exhausting the available memory by
             # doing it all in one go.
-            chunk = None
+            chunk_mv = memoryview(bytearray(1024))
+            num_bytes = 0
             while True:
-                chunk = response.body.read(2048)
-                if not chunk:
+                num_bytes = response.body.readinto(chunk_mv)
+                if num_bytes == 0 or num_bytes is None:
                     break
-                writer.write(chunk)
+                writer.write(chunk_mv[:num_bytes])
                 await writer.drain()
 
     await writer.wait_closed()
