@@ -448,13 +448,14 @@ Sec-WebSocket-Accept: %s\r
     await request.writer.drain()
 
 
+# TODO - enable the application code to write to the websocket
 def as_websocket(func):
     """An endpoint function decorator that performs a websocket handshake and
     passes the websocket object as the second argument to the function.
     """
     async def f(request, *args, **kwargs):
         await do_websocket_server_handshake(request)
-        ws = websocket(request.reader.ios, True)
+        ws = websocket(request.reader.s, True)
         return await func(request, ws, *args, **kwargs)
     return f
 
