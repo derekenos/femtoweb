@@ -1,5 +1,6 @@
 
 import binascii
+import gc
 import hashlib
 import json
 import re
@@ -274,10 +275,12 @@ get_file_path_content_type = \
 
 async def service_connection(reader, writer):
     try:
+        gc.collect()
         request = await parse_request(reader, writer)
         if DEBUG:
             print('request: {}'.format(request))
         await dispatch(request)
+        gc.collect()
     except KeyboardInterrupt:
         await reader.wait_closed()
         await writer.wait_closed()
