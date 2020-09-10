@@ -1,5 +1,7 @@
-import os
+
 import gc
+import os
+import machine
 from binascii import hexlify
 
 from ._os import path
@@ -19,9 +21,9 @@ from .server import (
     _404,
     _503,
     as_json,
+    get_file_path_content_type,
     route,
     send,
-    get_file_path_content_type,
 )
 
 
@@ -83,37 +85,36 @@ def _fs_GET_edit(fs_path, create):
     return _200(body=body)
 
 
-def _fs_PUT(fs_path, request):
+async def _fs_PUT(fs_path, request):
     """Handle a filesystem PUT request.
     """
     # TODO - validate the request (e.g. check for avail drive space, whether
     # directory already exists with same name, etc.))
-
     if request.headers.get('Expect') == '100-continue':
-        request.connection.write('HTTP/1.1 100 Continue\r\n')
-        request.connection.write('\r\n')
+        request.writer.write('HTTP/1.1 100 Continue\r\n')
+        request.writer.write('\r\n')
+        await request.writer.drain()
 
-    def chunker(max_size):
+    # TODO - write to a temporary file and rename to target on success.
+    MAX_CHUNK_BYTES = 1024
+    with open(fs_path, 'wb') as fh:
         bytes_remaining = int(request.headers['Content-Length'])
 
         # First yield from the body if non-empty.
         body = request.body
         while body:
-            chunk = body[:max_size]
-            body = body[max_size:]
-            yield chunk
+            chunk = body[:MAX_CHUNK_BYTES]
+            body = body[MAX_CHUNK_BYTES:]
+            fh.write(chunk)
             bytes_remaining -= len(chunk)
 
         # If we need more bytes, receive them from the socket.
         while bytes_remaining:
-            chunk = request.connection.recv(min(bytes_remaining, max_size))
-            yield chunk
-            bytes_remaining -= len(chunk)
-
-    # TODO - write to a temporary file and rename to target on success.
-    with open(fs_path, 'wb') as fh:
-        for chunk in chunker(1024):
+            chunk = await request.reader.read(
+                min(bytes_remaining, MAX_CHUNK_BYTES)
+            )
             fh.write(chunk)
+            bytes_remaining -= len(chunk)
 
     return _303(location='/_fs{}'.format(fs_path))
 
@@ -128,7 +129,7 @@ def _fs_DELETE(fs_path):
 
 
 @route('^((/_fs/?)|(/_fs/.+))$', methods=(GET, PUT, DELETE))
-def filesystem(request):
+async def filesystem(request):
     """Handle filesystem operations.
     """
     fs_path = request.path[4:] or '/'
@@ -142,7 +143,29 @@ def filesystem(request):
             return _fs_GET(fs_path)
 
     elif request.method == 'PUT':
-        return _fs_PUT(fs_path, request)
+        return await _fs_PUT(fs_path, request)
 
     elif request.method == 'DELETE':
         return _fs_DELETE(fs_path)
+
+
+@route('/_reset', methods=(GET, POST))
+async def _reset(request):
+    """Reset the device.
+    """
+    # Manually send the response prior to calling machine.reset
+    await send(request.writer, _200())
+    machine.reset()
+
+
+@route('/_mem_info', methods=(GET,))
+@as_json
+async def _mem_info(request):
+    """Return information about the allocated and free memory.
+    """
+    data = {
+        'mem_alloc': gc.mem_alloc(),
+        'mem_free': gc.mem_free(),
+        'gc_threshold': gc.threshold()
+    }
+    return _200(body=data)

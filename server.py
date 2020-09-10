@@ -1,12 +1,13 @@
 
 import binascii
+import gc
 import hashlib
 import json
 import re
 import socket
 import sys
+import uasyncio as asyncio
 from collections import namedtuple
-
 from uwebsocket import websocket
 
 
@@ -15,7 +16,8 @@ from uwebsocket import websocket
 ###############################################################################
 
 Request = namedtuple('Request', (
-    'connection',
+    'reader',
+    'writer',
     'method',
     'path',
     'query',
@@ -219,9 +221,9 @@ def parse_uri(uri):
     return path, query
 
 
-def parse_request(connection):
+async def parse_request(reader, writer):
     # Get the first 1024 bytes
-    data = connection.recv(1024)
+    data = await reader.read(1024)
     if not data:
         raise ZeroRead
 
@@ -258,7 +260,8 @@ def parse_request(connection):
         start_idx = end_idx + 2
 
     return Request(
-        connection=connection,
+        reader=reader,
+        writer=writer,
         method=method,
         path=path,
         query=query,
@@ -289,70 +292,60 @@ def get_file_path_content_type(fs_path):
 # Connection Handling
 ###############################################################################
 
-def service_connection(s, conn, addr):
-    # Is the socket accessible via the connection object?
-    if DEBUG:
-        print('Got a connection from: {}'.format(str(addr)))
-
+async def service_connection(reader, writer):
     try:
-        request = parse_request(conn)
+        gc.collect()
+        request = await parse_request(reader, writer)
         if DEBUG:
             print('request: {}'.format(request))
-        dispatch(request)
+        await dispatch(request)
+        gc.collect()
     except KeyboardInterrupt:
-        s.close()
+        await reader.wait_closed()
+        await writer.wait_closed()
         raise
     except Exception as e:
         sys.print_exception(e)
         try:
-            send(conn, _500(str(e)))
+            await send(writer, _500(str(e)))
         except Exception as e:
             sys.print_exception(e)
-        conn.close()
+        await reader.wait_closed()
+        await writer.wait_closed()
 
 
-def serve():
-    # Create a socket.
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    # Bind it to port 80.
-    s.bind(('', 80))
-    # Start listening for connections with a max buffer of 5 pending.
-    s.listen(5)
-    # Blocking mode was causing input timer period to be a constant 100mS?
-    s.setblocking(True)
-
-    while True:
-        try:
-            conn, addr = s.accept()
-            service_connection(s, conn, addr)
-        except OSError:
-            pass
+async def serve():
+    return await asyncio.start_server(service_connection, '', 80, backlog=5)
 
 
-def send(connection, response):
-    connection.send('HTTP/1.1 {} OK\n'.format(response.status_int).encode())
+async def send(writer, response):
+    if DEBUG:
+        print('sending response: {}'.format(response))
+    writer.write('HTTP/1.1 {} OK\n'.format(response.status_int).encode())
     for k, v in response.headers.items():
-        connection.send('{}: {}\n'.format(k, v).encode())
-    connection.send(b'\n')
+        writer.write('{}: {}\n'.format(k, v).encode())
+    writer.write(b'\n')
+    await writer.drain()
 
     if response.body is not None:
-        if not hasattr(response.body, 'read'):
+        if not hasattr(response.body, 'readinto'):
             # Assume that body is a string and send it.
-            connection.sendall(response.body.encode())
+            writer.write(response.body.encode())
+            await writer.drain()
         else:
             # Assume that body is a file-type object and iterate over it
             # sending each chunk to avoid exhausting the available memory by
             # doing it all in one go.
-            chunk = None
+            chunk_mv = memoryview(bytearray(1024))
+            num_bytes = 0
             while True:
-                chunk = response.body.read(2048)
-                if not chunk:
+                num_bytes = response.body.readinto(chunk_mv)
+                if num_bytes == 0 or num_bytes is None:
                     break
-                connection.send(chunk)
+                writer.write(chunk_mv[:num_bytes])
+                await writer.drain()
 
-    connection.close()
+    await writer.wait_closed()
 
 
 ###############################################################################
@@ -378,12 +371,12 @@ def route(path_pattern, methods=('GET',), query_param_parser_map=None):
         else:
             path_regex = re.compile(path_pattern)
 
-        def wrapper(request, *args, **kwargs):
+        async def wrapper(request, *args, **kwargs):
             """Invoke the request handler and send any response.
             """
-            response = func(request, *args, **kwargs)
+            response = await func(request, *args, **kwargs)
             if response is not None:
-                send(request.connection, response)
+                await send(request.writer, response)
 
         # Register this wrapper for the path.
         _routes.append((path_regex, methods, query_param_parser_map, wrapper))
@@ -396,8 +389,8 @@ def as_json(func):
     """A request handler decorator that JSON-encodes the Response body and sets
     the Content-Type to "application/json".
     """
-    def wrapper(*args, **kwargs):
-        response = func(*args, **kwargs)
+    async def wrapper(*args, **kwargs):
+        response = await func(*args, **kwargs)
         response.body = json.dumps(response.body)
         response.headers['Content-Type'] = 'application/json'
         return response
@@ -419,7 +412,7 @@ def parse_query_params(request, parser_map):
     return ok_params, bad_params
 
 
-def dispatch(request):
+async def dispatch(request):
     """Attempt to find and invoke the handler for the specified request path
     and return a bool indicating whether a handler was found.
     """
@@ -429,34 +422,34 @@ def dispatch(request):
         any_path_matches |= match is not None
         if match and request.method in methods:
             if query_param_parser_map is None:
-                func(request)
+                await func(request)
                 return
             ok_params, bad_params = parse_query_params(
                 request,
                 query_param_parser_map
             )
             if not bad_params:
-                func(request, **ok_params)
+                await func(request, **ok_params)
             else:
-                send(
-                    request.connection,
+                await send(
+                    request.writer,
                     _400('invalid params: {}'.format(bad_params))
                 )
             return
 
     if any_path_matches:
         # Send a Method-Not-Allowed response if any path matched.
-        send(request.connection, _405())
+        await send(request.writer, _405())
     else:
         # Otherwise, send a Not-Found respose.
-        send(request.connection, _404())
+        await send(request.writer, _404())
 
 
 ###############################################################################
 # Websockets
 ###############################################################################
 
-def do_websocket_server_handshake(request):
+async def do_websocket_server_handshake(request):
     """ Adapated from the websocket_helper.py:
     https://github.com/micropython/webrepl/blob/master/websocket_helper.py
     """
@@ -473,19 +466,19 @@ Connection: Upgrade\r
 Sec-WebSocket-Accept: %s\r
 \r
 """ % respkey
-    request.connection.send(resp)
+    request.writer.write(resp)
+    await request.writer.drain()
 
 
+# TODO - enable the application code to write to the websocket
 def as_websocket(func):
     """An endpoint function decorator that performs a websocket handshake and
     passes the websocket object as the second argument to the function.
     """
-    def f(request, *args, **kwargs):
-        # Set the socket to non-blocking.
-        request.connection.setblocking(False)
-        do_websocket_server_handshake(request)
-        ws = websocket(request.connection, True)
-        return func(request, ws, *args, **kwargs)
+    async def f(request, *args, **kwargs):
+        await do_websocket_server_handshake(request)
+        ws = websocket(request.reader.s, True)
+        return await func(request, ws, *args, **kwargs)
     return f
 
 
