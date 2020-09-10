@@ -99,7 +99,9 @@ DEBUG = False
 
 APPLICATION_JAVASCRIPT = 'application/javascript'
 APPLICATION_JSON = 'application/json'
+APPLICATION_OCTET_STREAM = 'application/octet-stream'
 APPLICATION_PYTHON = 'application/x-python'
+APPLICATION_SCHEMA_JSON = 'application/schema+json'
 IMAGE_GIF = 'image/gif'
 IMAGE_JPEG = 'image/jpeg'
 IMAGE_PNG = 'image/png'
@@ -108,6 +110,7 @@ TEXT_PLAIN = 'text/plain'
 
 FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP = {
     'js': APPLICATION_JAVASCRIPT,
+    'schema.json': APPLICATION_SCHEMA_JSON,
     'json': APPLICATION_JSON,
     'gif': IMAGE_GIF,
     'jpeg': IMAGE_JPEG,
@@ -117,6 +120,10 @@ FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP = {
     'py': APPLICATION_PYTHON,
     'txt': TEXT_PLAIN,
 }
+
+MAX_FILE_EXTENSION_SEGMENTS = max(
+    k.count('.') + 1 for k in FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP
+)
 
 DELETE = 'DELETE'
 GET = 'GET'
@@ -265,8 +272,20 @@ async def parse_request(reader, writer):
 get_file_extension_content_type = \
     lambda ext: FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP.get(ext.lower(), None)
 
-get_file_path_content_type = \
-    lambda fs_path: get_file_extension_content_type(fs_path.rsplit('.', 1)[1])
+def get_file_path_content_type(fs_path):
+    # Attempt to greedily match (i.e. the extension with the most segments) the
+    # filename extension to a content type.
+    splits = fs_path.rsplit('.', MAX_FILE_EXTENSION_SEGMENTS)
+    num_segs = len(splits) - 1
+    while num_segs > 0:
+        ext = '.'.join(splits[-num_segs:])
+        content_type = get_file_extension_content_type(ext)
+        if content_type is not None:
+            return content_type
+        num_segs -= 1
+    # Filename didn't match any definde content type so return the default
+    # 'application/octet-stream'.
+    return APPLICATION_OCTET_STREAM
 
 
 ###############################################################################
