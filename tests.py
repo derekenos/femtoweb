@@ -1,12 +1,14 @@
 
 from unittest import TestCase
 
-from .server import (
+import server
+from server import (
     CouldNotParse,
-    as_type,
     as_choice,
-    maybe_as,
     as_nonempty,
+    as_type,
+    get_file_path_content_type,
+    maybe_as,
     with_default_as,
 )
 
@@ -114,3 +116,22 @@ class Tester(TestCase):
                 self.assertRaises(CouldNotParse, parser, a)
             else:
                 self.assertEqual(parser(a), b)
+
+
+    def test_get_file_path_content_type(self):
+        for a, b in (
+                ('', server.APPLICATION_OCTET_STREAM),
+                ('test', server.APPLICATION_OCTET_STREAM),
+                ('test.unsupported', server.APPLICATION_OCTET_STREAM),
+                ('test.js', server.APPLICATION_JAVASCRIPT),
+                ('test.schema.json', server.APPLICATION_SCHEMA_JSON),
+                ('test.json', server.APPLICATION_JSON),
+                ('test.gif', server.IMAGE_GIF),
+                ('test.jpeg', server.IMAGE_JPEG),
+                ('test.jpg', server.IMAGE_JPEG),
+                ('test.png', server.IMAGE_PNG),
+                ('test.html', server.TEXT_HTML),
+                ('test.py', server.APPLICATION_PYTHON),
+                ('test.txt', server.TEXT_PLAIN),
+            ):
+            self.assertEqual(get_file_path_content_type(a), b)
