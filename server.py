@@ -12,6 +12,22 @@ from uwebsocket import websocket
 
 
 ###############################################################################
+# Global configuration
+###############################################################################
+
+class Config:
+    host = ''
+    port = 80
+    backlog = 5
+    use_cors = False
+
+    def __setattr__(self, k, v):
+        if not hasattr(self, k):
+            raise AssertionError('Config has no attribute: {}'.format(k))
+        super().__setattr__(k, v)
+
+
+###############################################################################
 # Types
 ###############################################################################
 
@@ -36,6 +52,10 @@ class Response():
             self.status_int = status_int
 
         _headers = DEFAULT_RESPONSE_HEADERS.copy()
+
+        if Config.use_cors:
+            _headers['Access-Control-Allow-Origin'] = '*'
+
         if hasattr(self, 'headers'):
             _headers.update(self.headers)
         if headers is not None:
@@ -315,7 +335,12 @@ async def service_connection(reader, writer):
 
 
 async def serve():
-    return await asyncio.start_server(service_connection, '', 80, backlog=5)
+    return await asyncio.start_server(
+        service_connection,
+        Config.host,
+        Config.port,
+        backlog=Config.backlog
+    )
 
 
 async def send(writer, response):
