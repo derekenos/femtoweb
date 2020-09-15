@@ -42,8 +42,8 @@ Request = namedtuple('Request', (
 ))
 
 DEFAULT_RESPONSE_HEADERS = {
-    'Content-Type': 'text/html',
-    'Connection': 'close',
+    'content-type': 'text/html',
+    'connection': 'close',
 }
 
 class Response():
@@ -54,7 +54,7 @@ class Response():
         _headers = DEFAULT_RESPONSE_HEADERS.copy()
 
         if Config.use_cors:
-            _headers['Access-Control-Allow-Origin'] = '*'
+            _headers['access-control-allow-origin'] = '*'
 
         if hasattr(self, 'headers'):
             _headers.update(self.headers)
@@ -73,11 +73,11 @@ class _303(Response):
     status_int = 303
 
     def __init__(self, location):
-        Response.__init__(self, headers={'Location': location})
+        Response.__init__(self, headers={'location': location})
 
 
 class ErrorResponse(Response):
-    headers = {'Content-Type': 'text/plain'}
+    headers = {'content-type': 'text/plain'}
     def __init__(self, details=None):
         body = '{} {}'.format(self.status_int, self.body)
         if details is not None:
@@ -274,9 +274,10 @@ async def parse_request(reader, writer):
             body = data[end_idx + 2:]
             break
 
-        # Delimiter found so parse the header key/value pair.
+        # Delimiter found so parse the header key/value pair, lowercasing the
+        # header name for internal consistency.
         k, v = _decode(data[start_idx : start_idx + delim_idx]).split(':', 1)
-        headers[k.strip()] = v.strip()
+        headers[k.strip().lower()] = v.strip()
         start_idx = end_idx + 2
 
     return Request(
@@ -417,7 +418,7 @@ def as_json(func):
     async def wrapper(*args, **kwargs):
         response = await func(*args, **kwargs)
         response.body = json.dumps(response.body)
-        response.headers['Content-Type'] = 'application/json'
+        response.headers['content-type'] = 'application/json'
         return response
     return wrapper
 
@@ -427,7 +428,7 @@ def parse_json_body(func):
     request body and pass it as an argument to the handler.
     """
     async def wrapper(request, *args, **kwargs):
-        if request.headers.get('Content-Type') != APPLICATION_JSON:
+        if request.headers.get('content-type') != APPLICATION_JSON:
             return _400('Expected Content-Type: {}'.format(APPLICATION_JSON))
         try:
             data = json.loads(request.body)
@@ -493,7 +494,7 @@ async def do_websocket_server_handshake(request):
     """ Adapated from the websocket_helper.py:
     https://github.com/micropython/webrepl/blob/master/websocket_helper.py
     """
-    webkey = request.headers.get('Sec-WebSocket-Key')
+    webkey = request.headers.get('sec-websocket-key')
     if not webkey:
         raise OSError("Not a websocket request")
     respkey = bytes(webkey, 'ascii') + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"

@@ -69,7 +69,7 @@ def _fs_GET(fs_path):
     # Return what we assume to be a file
     content_type = get_file_path_content_type(fs_path)
     return _200(
-        headers={'Content-Type': content_type},
+        headers={'content-type': content_type},
         body=open(fs_path, 'rb')
     )
 
@@ -90,7 +90,7 @@ async def _fs_PUT(fs_path, request):
     """
     # TODO - validate the request (e.g. check for avail drive space, whether
     # directory already exists with same name, etc.))
-    if request.headers.get('Expect') == '100-continue':
+    if request.headers.get('expect') == '100-continue':
         request.writer.write('HTTP/1.1 100 Continue\r\n')
         request.writer.write('\r\n')
         await request.writer.drain()
@@ -98,7 +98,7 @@ async def _fs_PUT(fs_path, request):
     # TODO - write to a temporary file and rename to target on success.
     MAX_CHUNK_BYTES = 1024
     with open(fs_path, 'wb') as fh:
-        bytes_remaining = int(request.headers['Content-Length'])
+        bytes_remaining = int(request.headers['content-length'])
 
         # First yield from the body if non-empty.
         body = request.body
