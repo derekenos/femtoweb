@@ -422,6 +422,21 @@ def as_json(func):
     return wrapper
 
 
+def parse_json_body(func):
+    """A request handler decorator that attempts to parse a JSON-encoded
+    request body and pass it as an argument to the handler.
+    """
+    async def wrapper(request, *args, **kwargs):
+        if request.headers.get('Content-Type') != APPLICATION_JSON:
+            return _400('Expected Content-Type: {}'.format(APPLICATION_JSON))
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            return _400('Could not parse request body as JSON')
+        return await func(request, data, *args, **kwargs)
+    return wrapper
+
+
 def parse_query_params(request, parser_map):
     """Apply parsers to the request query params.
     """
