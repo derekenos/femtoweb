@@ -1,30 +1,10 @@
 
-import binascii
-import gc
-import hashlib
+import asyncio
 import json
 import re
-import socket
-import sys
-import uasyncio as asyncio
+from traceback import print_exc
+
 from collections import namedtuple
-from uwebsocket import websocket
-
-
-###############################################################################
-# Global configuration
-###############################################################################
-
-class Config:
-    host = ''
-    port = 80
-    backlog = 5
-    use_cors = False
-
-    def __setattr__(self, k, v):
-        if not hasattr(self, k):
-            raise AssertionError('Config has no attribute: {}'.format(k))
-        super().__setattr__(k, v)
 
 
 ###############################################################################
@@ -47,13 +27,15 @@ DEFAULT_RESPONSE_HEADERS = {
 }
 
 class Response():
+    CORS_ENABLED = True
+
     def __init__(self, status_int=None, headers=None, body=None):
         if status_int is not None:
             self.status_int = status_int
 
         _headers = DEFAULT_RESPONSE_HEADERS.copy()
 
-        if Config.use_cors:
+        if self.CORS_ENABLED:
             _headers['access-control-allow-origin'] = '*'
 
         if hasattr(self, 'headers'):
@@ -315,32 +297,31 @@ def get_file_path_content_type(fs_path):
 
 async def service_connection(reader, writer):
     try:
-        gc.collect()
         request = await parse_request(reader, writer)
         if DEBUG:
             print('request: {}'.format(request))
         await dispatch(request)
-        gc.collect()
     except KeyboardInterrupt:
-        await reader.wait_closed()
+        writer.close()
         await writer.wait_closed()
         raise
     except Exception as e:
-        sys.print_exception(e)
+        print_exc()
         try:
             await send(writer, _500(str(e)))
-        except Exception as e:
-            sys.print_exception(e)
-        await reader.wait_closed()
+        except Exception:
+            print_exc()
+        writer.close()
         await writer.wait_closed()
 
 
-async def serve():
+async def serve(host='0.0.0.0', port='8000', backlog=5, enable_cors=True):
+    Response.CORS_ENABLED = enable_cors
     return await asyncio.start_server(
         service_connection,
-        Config.host,
-        Config.port,
-        backlog=Config.backlog
+        host,
+        port,
+        backlog=backlog
     )
 
 
@@ -370,7 +351,7 @@ async def send(writer, response):
                     break
                 writer.write(chunk_mv[:num_bytes])
                 await writer.drain()
-
+    writer.close()
     await writer.wait_closed()
 
 
@@ -486,43 +467,8 @@ async def dispatch(request):
         await send(request.writer, _404())
 
 
-###############################################################################
-# Websockets
-###############################################################################
-
-async def do_websocket_server_handshake(request):
-    """ Adapated from the websocket_helper.py:
-    https://github.com/micropython/webrepl/blob/master/websocket_helper.py
-    """
-    webkey = request.headers.get('sec-websocket-key')
-    if not webkey:
-        raise OSError("Not a websocket request")
-    respkey = bytes(webkey, 'ascii') + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-    respkey = hashlib.sha1(respkey).digest()
-    respkey = binascii.b2a_base64(respkey)[:-1]
-    resp = b"""\
-HTTP/1.1 101 Switching Protocols\r
-Upgrade: websocket\r
-Connection: Upgrade\r
-Sec-WebSocket-Accept: %s\r
-\r
-""" % respkey
-    request.writer.write(resp)
-    await request.writer.drain()
-
-
-# TODO - enable the application code to write to the websocket
-def as_websocket(func):
-    """An endpoint function decorator that performs a websocket handshake and
-    passes the websocket object as the second argument to the function.
-    """
-    async def f(request, *args, **kwargs):
-        await do_websocket_server_handshake(request)
-        ws = websocket(request.reader.s, True)
-        return await func(request, ws, *args, **kwargs)
-    return f
-
-
 # Run the server if executed as a script.
 if __name__ == '__main__':
-    serve()
+    event_loop = asyncio.get_event_loop()
+    event_loop.create_task(serve())
+    event_loop.run_forever()

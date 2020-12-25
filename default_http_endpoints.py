@@ -1,13 +1,9 @@
 
-import gc
+from os import path
 import os
-import machine
-from binascii import hexlify
 
-from ._os import path
-
-from . import default_html_renderers as renderers
-from .server import (
+import default_html_renderers as renderers
+from server import (
     APPLICATION_JSON,
     APPLICATION_PYTHON,
     DELETE,
@@ -147,25 +143,3 @@ async def filesystem(request):
 
     elif request.method == 'DELETE':
         return _fs_DELETE(fs_path)
-
-
-@route('/_reset', methods=(GET, POST))
-async def _reset(request):
-    """Reset the device.
-    """
-    # Manually send the response prior to calling machine.reset
-    await send(request.writer, _200())
-    machine.reset()
-
-
-@route('/_mem_info', methods=(GET,))
-@as_json
-async def _mem_info(request):
-    """Return information about the allocated and free memory.
-    """
-    data = {
-        'mem_alloc': gc.mem_alloc(),
-        'mem_free': gc.mem_free(),
-        'gc_threshold': gc.threshold()
-    }
-    return _200(body=data)

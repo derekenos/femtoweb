@@ -1,5 +1,5 @@
 
-from ._os import path
+from os import path
 
 
 def HTMLDocument(head, body):
