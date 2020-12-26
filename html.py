@@ -1,17 +1,31 @@
 """HTML Document and Element String Generators
 """
+###############################################################################
+# Constants
+###############################################################################
+
+DOCTYPE = '<!DOCTYPE html>'
+
+class Entities:
+    DOUBLE_QUOTE = '&quot;'
+    GREATER_THAN = '&gt;'
+    LESS_THAN = '&gt;'
+
+###############################################################################
+# HTMLElement Base Class
+###############################################################################
 
 class HTMLElement:
     TAG_NAME = 'html'
     IS_VOID = False
     REQUIRED_ATTRS = ()
-    INDENT_CONTENT = True
+    INDENT_TEXT = True
     CHILD_INDENT = 2
 
-    def __init__(self, content='', children=None, **attrs):
-        if self.IS_VOID and content:
+    def __init__(self, text=None, children=None, **attrs):
+        if self.IS_VOID and text:
             raise AssertionError(
-                'content not allowed for void tag "{}"'.format(self.TAG_NAME)
+                'text not allowed for void tag "{}"'.format(self.TAG_NAME)
             )
 
         if any(k not in attrs for k in self.REQUIRED_ATTRS):
@@ -22,22 +36,37 @@ class HTMLElement:
                 )
             )
 
-        self.content = content
+        self.text = text
         self.attrs = attrs
         self.children = children or []
 
     @staticmethod
     def encode_attr_value(v):
-        return str(v).replace('"', '&quot;')
-
-    def append_child(self, child):
-        self.children.append(child)
+        for c in str(v):
+            if c == '"':
+                yield from Entities.DOUBLE_QUOTE
+            else:
+                yield c
 
     @staticmethod
     def _pad_gen(num):
         while num > 0:
             yield ' '
             num -= 1
+
+    def append_child(self, child):
+        self.children.append(child)
+
+    def escaped_text(self):
+        """Yield an escaped version of self.text.
+        """
+        for c in self.text:
+            if c == '<':
+                yield from Entities.LESS_THAN
+            elif c == '>':
+                yield from Entities.GREATER_THAN
+            else:
+                yield c
 
     def __call__(self, indent=0):
         """Return a character generator.
@@ -57,13 +86,13 @@ class HTMLElement:
         yield '>'
         yield '\n'
 
-        # Yield the content.
-        if self.content:
-            if not self.INDENT_CONTENT:
-                yield from self.content
+        # Yield the text.
+        if self.text:
+            if not self.INDENT_TEXT:
+                yield from self.escaped_text()
             else:
                 yield from self._pad_gen(indent + self.CHILD_INDENT)
-                for c in self.content:
+                for c in self.escaped_text():
                     yield c
                     if c == '\n':
                         yield from self._pad_gen(indent + self.CHILD_INDENT)
@@ -82,6 +111,10 @@ class HTMLElement:
             yield from self.TAG_NAME
             yield '>'
             yield '\n'
+
+###############################################################################
+# HTMLElement Subclasses
+###############################################################################
 
 class VoidHTMLElement(HTMLElement):
     IS_VOID = True
@@ -129,9 +162,12 @@ class Script(HTMLElement):
 
 class TextArea(HTMLElement):
     TAG_NAME = 'textarea'
-    INDENT_CONTENT = False
+    INDENT_TEXT = False
 
-DOCTYPE = '<!DOCTYPE html>'
+
+###############################################################################
+# Document Generator
+###############################################################################
 
 def Document(body_els, head_els=()):
     yield from DOCTYPE
@@ -143,6 +179,10 @@ def Document(body_els, head_els=()):
             Body(children=body_els)
         )
     )()
+
+###############################################################################
+# GenReader Class
+###############################################################################
 
 class GenReader:
     """Implement file-like access via readinto() for an HTML generator.
