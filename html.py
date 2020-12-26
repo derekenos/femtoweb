@@ -33,33 +33,55 @@ class HTMLElement:
     def append_child(self, child):
         self.children.append(child)
 
-    def __str__(self, indent=0):
-        pad_s = ' ' * indent
-        child_pad_s = pad_s + ' ' * self.CHILD_INDENT
-        attrs_str = '' if not self.attrs else ' {}'.format(' '.join(
-            '{}="{}"'.format(k, self.encode_attr_value(v))
-            for k, v in self.attrs.items()
-        ))
-        inner_html = (
-            ('\n{}'.format(child_pad_s if self.INDENT_CONTENT else '')
-             if self.content else '')
-            + (('\n{}'.format(child_pad_s).join(self.content.split('\n')))
-               if self.INDENT_CONTENT else self.content)
-            + ('\n' if self.children else '')
-            + '\n'.join(
-                child(indent + self.CHILD_INDENT) for child in self.children
-            )
-        )
-        close_tag = (
-            '\n{}</{}>'.format(pad_s, self.TAG_NAME)
-            if not self.IS_VOID else ''
-        )
-        return '{}<{}{}>{}{}'.format(
-            pad_s, self.TAG_NAME, attrs_str, inner_html, close_tag
-        )
+    @staticmethod
+    def _pad_gen(num):
+        while num > 0:
+            yield ' '
+            num -= 1
 
     def __call__(self, indent=0):
-        return self.__str__(indent)
+        """Return a character generator.
+        """
+        # Yield the start tag.
+        yield from self._pad_gen(indent)
+        yield '<'
+        yield from self.TAG_NAME
+        if self.attrs:
+            for k, v in self.attrs.items():
+                yield ' '
+                yield from k
+                yield '='
+                yield '"'
+                yield from self.encode_attr_value(v)
+                yield '"'
+        yield '>'
+        yield '\n'
+
+        # Yield the content.
+        if self.content:
+            if not self.INDENT_CONTENT:
+                yield from self.content
+            else:
+                yield from self._pad_gen(indent + self.CHILD_INDENT)
+                for c in self.content:
+                    yield c
+                    if c == '\n':
+                        yield from self._pad_gen(indent + self.CHILD_INDENT)
+            yield '\n'
+
+        # Yield the children.
+        if self.children:
+            for child in self.children:
+                yield from child(indent + self.CHILD_INDENT)
+
+        # Maybe yield closing tag.
+        if not self.IS_VOID:
+            yield from self._pad_gen(indent)
+            yield '<'
+            yield '/'
+            yield from self.TAG_NAME
+            yield '>'
+            yield '\n'
 
 class VoidHTMLElement(HTMLElement):
     IS_VOID = True
@@ -109,14 +131,37 @@ class TextArea(HTMLElement):
     TAG_NAME = 'textarea'
     INDENT_CONTENT = False
 
-Document = lambda body_els, head_els=(): (
-    '<!DOCTYPE html>\n' + str(
-        HTMLElement(
-            lang='en',
-            children=(
-                Head(children=(Meta(charset='utf-8'),) + tuple(head_els)),
-                Body(children=body_els)
-            )
+DOCTYPE = '<!DOCTYPE html>'
+
+def Document(body_els, head_els=()):
+    yield from DOCTYPE
+    yield '\n'
+    yield from HTMLElement(
+        lang='en',
+        children=(
+            Head(children=(Meta(charset='utf-8'),) + tuple(head_els)),
+            Body(children=body_els)
         )
-    )
-)
+    )()
+
+class GenReader:
+    """Implement file-like access via readinto() for an HTML generator.
+    """
+    def __init__(self, gen, encoding='utf-8'):
+        self.gen = gen
+        self.encoding = encoding
+
+    def readinto(self, buf):
+        # Write up to len(buf) bytes into buf from the generator and return the
+        # number of bytes written.
+        i = 0
+        buf_size = len(buf)
+        while i < buf_size:
+            try:
+                buf[i] = ord(next(self.gen).encode(self.encoding))
+            except StopIteration:
+                break
+            i += 1
+        return i
+
+DocumentStream = lambda *args, **kwargs: GenReader(Document(*args, **kwargs))

@@ -6,7 +6,7 @@ from html import (
     Anchor,
     Button,
     Div,
-    Document,
+    DocumentStream,
     Script,
     Span,
     Style,
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {{
 """.format(req_path=req_path, filename=filename)
     )
 
-    return Document(
+    return DocumentStream(
         body_els=(
             TextArea(text, rows=text.count('\n') + 1, style='width: 100%;',
                      id='textarea'),
@@ -90,7 +90,7 @@ def FilesystemDirectoryListing(fs_path, req_path):
     href_prefix = '/_fs{}/'.format(
         ('/' + req_path.rstrip('/')) if req_path else ''
     )
-    return Document(
+    return DocumentStream(
         body_els=[_directory_listing_item(fs_path, href_prefix, filename)
                   for filename in os.listdir(fs_path)],
         head_els=[Style('body {font-family: monospace; font-size: 1rem;}')]
