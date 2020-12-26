@@ -9,7 +9,7 @@ DOCTYPE = '<!DOCTYPE html>'
 class Entities:
     DOUBLE_QUOTE = '&quot;'
     GREATER_THAN = '&gt;'
-    LESS_THAN = '&gt;'
+    LESS_THAN = '&lt;'
 
 ###############################################################################
 # HTMLElement Base Class
