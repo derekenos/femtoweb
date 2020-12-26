@@ -158,10 +158,12 @@ class GenReader:
         buf_size = len(buf)
         while i < buf_size:
             try:
-                buf[i] = ord(next(self.gen).encode(self.encoding))
+                char = next(self.gen)
             except StopIteration:
                 break
-            i += 1
+            for byte in char.encode(self.encoding):
+                buf[i] = byte
+                i += 1
         return i
 
 DocumentStream = lambda *args, **kwargs: GenReader(Document(*args, **kwargs))
