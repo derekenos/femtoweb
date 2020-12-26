@@ -3,10 +3,9 @@
 from os import path
 import os
 
-from html import (
-    HTMLDocument,
-    TextFileEditor,
+from filesystem_views import (
     FilesystemDirectoryListing,
+    TextFileEditor,
 )
 
 from server import (
