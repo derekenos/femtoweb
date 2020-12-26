@@ -3,11 +3,10 @@
 from os import path
 import os
 
-from default_html_renderers import (
+from html import (
     HTMLDocument,
-    HTMLAnchorElement,
-    HTMLSpanElement,
     TextFileEditor,
+    FilesystemDirectoryListing,
 )
 
 from server import (
@@ -40,6 +39,7 @@ EDITABLE_CONTENT_TYPES = (
     TEXT_PLAIN,
 )
 
+# Set the default public filesystem root to "<this-directory>/public".
 DEFAULT_PUBLIC_ROOT = path.join(path.dirname(__file__), 'public')
 
 ###############################################################################
@@ -53,58 +53,16 @@ def _fs_GET(public_root, req_path):
     if not path.exists(fs_path):
         return _404()
 
-    if not path.isdir(fs_path):
-        # The requested path is not a directory. Attempt to return the file.
-        content_type = get_file_path_content_type(fs_path)
-        return _200(
-            headers={'content-type': content_type},
-            body=open(fs_path, 'rb')
-        )
-
     # The request path is a directory, return an HTML directory listing.
-    # Return the directory listing
-    filenames = os.listdir(fs_path)
+    if path.isdir(fs_path):
+        return _200(body=FilesystemDirectoryListing(fs_path, req_path))
 
-    # Define some styles.
-    head = """
-    <style>
-      body {
-        font-family: monospace;
-        font-size: 1rem;
-      }
-    </style>
-    """
-
-    # Generate the HTML body.
-    body = ''
-    href_prefix = '/_fs{}/'.format(
-        ('/' + req_path.rstrip('/')) if req_path else ''
+    # The requested path is a file, so return it.
+    content_type = get_file_path_content_type(fs_path)
+    return _200(
+        headers={'content-type': content_type},
+        body=open(fs_path, 'rb')
     )
-    for filename in filenames:
-        _fs_path = path.join(fs_path, filename)
-        is_dir = path.isdir(_fs_path)
-
-        href_suffix = '{}/'.format(filename) if is_dir else filename
-
-        body += '<div>'
-        # Add either a directory spacer or edit link.
-        if is_dir:
-            body += HTMLSpanElement('----', style="margin-right: 1rem;")
-        else:
-            body += HTMLAnchorElement(
-                'edit',
-                href=href_prefix + href_suffix + '?edit=1',
-                style='text-decoration: none; margin-right: 1rem;'
-            )
-        # Add the item link.
-        body += HTMLAnchorElement(
-            href_suffix,
-            href=href_prefix + href_suffix,
-            style='text-decoration: none; margin-right: 1rem;'
-        )
-        body += '</div>'
-
-    return _200(body=HTMLDocument(body, head))
 
 def _fs_GET_edit(public_root, req_path, create):
     fs_path = path.join(public_root, req_path)
