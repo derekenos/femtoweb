@@ -41,6 +41,16 @@ class HTMLElement:
         self.children = children or []
 
     @staticmethod
+    def encode_attr_key(k):
+        # Assume that any leading underscore was specified to prevent a Python
+        # keyword collision (e.g. class) and skip it.
+        i = 1 if k[0] == '_' else 0
+        k_len = len(k)
+        while i < k_len:
+            yield k[i]
+            i += 1
+
+    @staticmethod
     def encode_attr_value(v):
         for c in str(v):
             if c == '"':
@@ -78,7 +88,7 @@ class HTMLElement:
         if self.attrs:
             for k, v in self.attrs.items():
                 yield ' '
-                yield from k
+                yield from self.encode_attr_key(k)
                 yield '='
                 yield '"'
                 yield from self.encode_attr_value(v)
