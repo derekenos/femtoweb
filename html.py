@@ -42,12 +42,24 @@ class HTMLElement:
 
     @staticmethod
     def encode_attr_key(k):
-        # Assume that any leading underscore was specified to prevent a Python
-        # keyword collision (e.g. class) and skip it.
-        i = 1 if k[0] == '_' else 0
+        # Yield the key with any leading underscore stripped (to provide for
+        # the specification of attribute name keyword arguments that would
+        # otherwise collide with a Python keyword, e.g. class) and, if a
+        # leading underscore is present, replace all following underscores with
+        # a hyphens (to provide for the specification of attribute names
+        # containing a hyphen which is standard HTML stuff). Note that both of
+        # these cases could be handled with an unpacked dict as the kwargs,
+        # i.e. func(**{'class': '...', 'data-count': 1}), but that's a lot of
+        # extra characters.
+        escaped = k[0] == '_'
+        i = 1 if escaped else 0
         k_len = len(k)
         while i < k_len:
-            yield k[i]
+            c = k[i]
+            if c == '_' and escaped:
+                yield '-'
+            else:
+                yield c
             i += 1
 
     @staticmethod
