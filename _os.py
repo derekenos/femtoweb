@@ -76,3 +76,7 @@ class path():
     @staticmethod
     def split(path):
         return path.split('/')
+
+    @staticmethod
+    def dirname(path):
+        return path.rsplit('/', 1)[0]
