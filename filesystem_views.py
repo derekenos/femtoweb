@@ -2,7 +2,7 @@
 import os
 from os import path
 
-from html import (
+from htmlephant import (
     Anchor,
     Button,
     Div,
@@ -10,7 +10,7 @@ from html import (
     Script,
     Span,
     Style,
-    TextArea,
+    Textarea,
 )
 
 ###############################################################################
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {{
 
     return DocumentStream(
         body_els=(
-            TextArea(text, rows=text.count('\n') + 1, style='width: 100%;',
+            Textarea(text, rows=text.count('\n') + 1, style='width: 100%;',
                      id='textarea'),
             Button('submit', id='submit')
         ),
@@ -69,15 +69,15 @@ def _directory_listing_item(fs_path, href_prefix, filename):
     container = Div()
     # Add either a directory spacer or edit link.
     if is_dir:
-        container.append_child(Span('----', style="margin-right: 1rem;"))
+        container.children.append(Span('----', style="margin-right: 1rem;"))
     else:
-        container.append_child(Anchor(
+        container.children.append(Anchor(
             'edit',
             href=href_prefix + href_suffix + '?edit=1',
             style='text-decoration: none; margin-right: 1rem;'
         ))
     # Add the item link.
-    container.append_child(Anchor(
+    container.children.append(Anchor(
         href_suffix,
         href=href_prefix + href_suffix,
         style='text-decoration: none; margin-right: 1rem;'
