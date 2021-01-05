@@ -2,7 +2,7 @@
 import os
 from ._os import path
 
-from htmlephant import (
+from .htmlephant import (
     Anchor,
     Button,
     Div,
