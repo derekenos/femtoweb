@@ -1,8 +1,7 @@
 
 from ._os import path
 
-
-def HTMLDocument(head, body):
+def HTMLDocument(body, head=''):
     return """
     <!DOCTYPE html>
     <html>
@@ -19,15 +18,28 @@ def HTMLDocument(head, body):
     </html>
     """.format(head=head, body=body)
 
+def _html_element(tag_name, self_closing=False):
+    def f(inner_html, **kwargs):
+        if self_closing and inner_html:
+            raise AssertionError
+        return '<{0} {1}>{2}{3}'.format(
+            tag_name,
+            ' '.join('{}="{}"'.format(k, v) for k, v in kwargs.items()),
+            inner_html,
+            '</{}>'.format(tag_name) if not self_closing else ''
+        )
+    return f
+
+HTMLAnchorElement = _html_element('a')
+HTMLSpanElement = _html_element('span')
 
 def Banner(text):
     return """
     <div id="banner">{text}</div>
     """.format(text=text)
 
-
-def TextFileEditor(fs_path, text):
-    filename = path.split(fs_path)[-1]
+def TextFileEditor(req_path, text):
+    filename = path.split(req_path)[-1]
     head = """
     <script>
       document.addEventListener('DOMContentLoaded', () => {{
@@ -35,7 +47,7 @@ def TextFileEditor(fs_path, text):
         const buttonEl = document.getElementById('submit')
 
         function submit () {{
-          fetch(new URL("/_fs{fs_path}", window.location.href), {{
+          fetch(new URL("/_fs/{req_path}", window.location.href), {{
             method: 'PUT',
             headers: {{
               'Content-Type': 'text/plain',
@@ -58,7 +70,7 @@ def TextFileEditor(fs_path, text):
         }})
       }})
     </script>
-    """.format(fs_path=fs_path, filename=filename)
+    """.format(req_path=req_path, filename=filename)
 
     num_rows = text.count('\n') + 1
     body = """
@@ -69,4 +81,4 @@ def TextFileEditor(fs_path, text):
         text=text
     )
 
-    return HTMLDocument(head, body)
+    return HTMLDocument(body, head)
