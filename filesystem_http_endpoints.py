@@ -151,9 +151,10 @@ async def _fs_PUT(public_root, req_path, request):
 
     return _303(location='/_fs/{}'.format(req_path))
 
-def _fs_DELETE(fs_path):
+def _fs_DELETE(public_root, req_path):
     """Handle a filesystem DELETE request.
     """
+    fs_path = path.join(public_root, req_path)
     if not path.exists(fs_path):
         return _404()
     os.remove(fs_path)
@@ -182,7 +183,7 @@ async def filesystem(request, public_root):
         return await _fs_PUT(public_root, req_path, request)
 
     elif request.method == 'DELETE':
-        return _fs_DELETE(fs_path)
+        return _fs_DELETE(public_root, req_path)
 
 ###############################################################################
 # Route attacher
