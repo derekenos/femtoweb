@@ -45,18 +45,41 @@ Hello from femtoweb!
 
 ### routing
 
-Registering a function as the handler for requests to a certain URL path is accomplished using the [route](https://github.com/derekenos/femtoweb/blob/master/server.py#L366) decorator:
+Registering a function as the handler for requests to a certain URL path is accomplished using the [route](https://github.com/derekenos/femtoweb/blob/master/server.py#L366) decorator.
+
+#### Usage
 
 ```
-@route(<path_regex_string>, methods=(<method>, ...))
+@route(path_pattern, methods=('GET',), query_param_parser_map=None)
 async def handler(request):
    ... fun stuff ...
-   return <Response>
+   return Response()
 ```
+
 Where:
-- `path_regex_string` is a regular expression string that will be used to match against the request path. Note that if you do not specifying a leading `^` or trailing `$`, [both will be automatically added for you](https://github.com/derekenos/femtoweb/blob/master/server.py#L377).
-- `method` is one of [DELETE, GET, POST, PUT](https://github.com/derekenos/femtoweb/blob/master/server.py#L130-L133)
+
+- `path_pattern` is a regular expression string that will be used to match against the request path. Note that if you do not specifying a leading `^` or trailing `$`, [both will be automatically added for you](https://github.com/derekenos/femtoweb/blob/master/server.py#L377).
+- `methods` is an iterable of one or more of [DELETE, GET, POST, PUT](https://github.com/derekenos/femtoweb/blob/master/server.py#L130-L133)
+- `query_param_parser_map` is an optional `<param-name>` -> `<parser-func>` map that will be used to parse request params. Any missing required or invalid params will result in a `400 - Bad Request` response.
 - `Response` is a [Response](https://github.com/derekenos/femtoweb/blob/master/server.py#L29) object
+
+#### Example
+
+This route simply returns the value of the `text` request query parameter.
+```
+@route('/echo', methods=(GET,), query_param_parser_map={
+    'text': as_type(str)
+})
+async def echo(request, text):
+    return _200(body=text)
+```
+
+#### Available Query Param Parser Functions
+- [as_type(t)](https://github.com/derekenos/femtoweb/blob/5a0b8c960d88bda274c705832a10686f93ec5d71/server.py#L155) - must be of type `t`
+- [as_choice(\*choices)](https://github.com/derekenos/femtoweb/blob/5a0b8c960d88bda274c705832a10686f93ec5d71/server.py#L167) - must be one of `*choices`
+- [as_nonempty(parser)](https://github.com/derekenos/femtoweb/blob/5a0b8c960d88bda274c705832a10686f93ec5d71/server.py#L171) - must be non-empty
+- [with_default_as(parser, default)](https://github.com/derekenos/femtoweb/blob/5a0b8c960d88bda274c705832a10686f93ec5d71/server.py#L178) - return `default` if parser fails
+- [maybe_as(parser)](https://github.com/derekenos/femtoweb/blob/5a0b8c960d88bda274c705832a10686f93ec5d71/server.py#L187): return `None` if parser fails
 
 #### Order and Methods
 
