@@ -126,18 +126,18 @@ This will make the `/time` endpoint respond with the body `{"currentTime": "2019
 
 ### File Operations
 
-`filesystem_http_endpoints` implements a [/\_fs](https://github.com/derekenos/femtoweb/blob/master/filesystem_http_endpoints.py#L166) endpoint that supports file operations.
+[filesystem_endpoints.py](https://github.com/derekenos/femtoweb/blob/7df10a30115f08736a6055e44e3fd924d4ee3601/filesystem_endpoints.py) implements a [/\_fs](https://github.com/derekenos/femtoweb/blob/7df10a30115f08736a6055e44e3fd924d4ee3601/filesystem_endpoints.py#L152) endpoint that supports file operations.
 
 #### GET Operations
 
 Currently, a `GET` to:
 
-- a directory-type object path will respond with a HTML list of `<a>` links to each contained item
+- a directory-type object path will respond with an HTML page comprising a list of links
 - a file-type object path will respond with the file itself, setting the response `Content-Type` as appropriate
 
 ##### In-browser File Editor
 
-`default_html_renderers` defines a super-simple [TextFileEditor](https://github.com/derekenos/femtoweb/blob/master/default_html_renderers.py#L41) in-browser editor for plain text files that you can access by specifying the `edit=1` URL arg, e.g.:
+[filesystem_views.py](https://github.com/derekenos/femtoweb/blob/7df10a30115f08736a6055e44e3fd924d4ee3601/filesystem_views.py) defines a super-simple [TextFileEditor](https://github.com/derekenos/femtoweb/blob/7df10a30115f08736a6055e44e3fd924d4ee3601/filesystem_views.py#L20) in-browser editor for plain text files that you can access by specifying the `edit=1` URL arg, e.g.:
 `http://localhost:8000/_fs/hello.txt?edit=1`
 
 Once you're done editing, you can click the `Submit` button or press `CTRL-Enter` to submit your changes, after which it will automatically redirect to the non-edit URL for the file.
