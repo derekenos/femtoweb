@@ -23,7 +23,7 @@ If all goes well, when you point a web browser at `localhost:8000` you'll see th
 ```
 Looks good to me :thumbsup:
 
-You're seeing this because, by default, the root path (i.e. `/`) is not routed to anything. If you go over to `localhost:8000/_fs` you'll hit the [`filesystem` endpoint defined in `filesystem_http_endpoints`](https://github.com/derekenos/femtoweb/blob/master/filesystem_http_endpoints.py) that allows you to navigate the local filesystem.
+You're seeing this because, by default, the root path (i.e. `/`) is not routed to anything. If you go over to `localhost:8000/_fs` you'll hit [this endpoint](https://github.com/derekenos/femtoweb/blob/7df10a30115f08736a6055e44e3fd924d4ee3601/filesystem_endpoints.py#L152) defined in [filesystem_endpoints.py](https://github.com/derekenos/femtoweb/blob/7df10a30115f08736a6055e44e3fd924d4ee3601/filesystem_endpoints.py) that allows you to navigate the local filesystem.
 
 To demonstrate adding a handler for the root path, add the following [here in `serve.py`](https://github.com/derekenos/femtoweb/blob/master/serve.py#L6), and restart the server.
 
