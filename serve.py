@@ -1,8 +1,8 @@
 
 import asyncio
 
-import filesystem_endpoints
-from server import serve
+from femtoweb import filesystem_endpoints
+from femtoweb.server import serve
 
 if __name__ == '__main__':
     filesystem_endpoints.attach()
