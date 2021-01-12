@@ -3,12 +3,12 @@
 from os import path
 import os
 
-from filesystem_views import (
+from .filesystem_views import (
     FilesystemDirectoryListing,
     TextFileEditor,
 )
 
-from server import (
+from .server import (
     APPLICATION_JSON,
     APPLICATION_PYTHON,
     DELETE,

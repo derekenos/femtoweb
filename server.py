@@ -107,19 +107,21 @@ APPLICATION_SCHEMA_JSON = 'application/schema+json'
 IMAGE_GIF = 'image/gif'
 IMAGE_JPEG = 'image/jpeg'
 IMAGE_PNG = 'image/png'
+TEXT_CSS = 'text/css'
 TEXT_HTML = 'text/html'
 TEXT_PLAIN = 'text/plain'
 
 FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP = {
-    'js': APPLICATION_JAVASCRIPT,
-    'schema.json': APPLICATION_SCHEMA_JSON,
-    'json': APPLICATION_JSON,
+    'css': TEXT_CSS,
     'gif': IMAGE_GIF,
+    'html': TEXT_HTML,
     'jpeg': IMAGE_JPEG,
     'jpg': IMAGE_JPEG,
+    'js': APPLICATION_JAVASCRIPT,
+    'json': APPLICATION_JSON,
     'png': IMAGE_PNG,
-    'html': TEXT_HTML,
     'py': APPLICATION_PYTHON,
+    'schema.json': APPLICATION_SCHEMA_JSON,
     'txt': TEXT_PLAIN,
 }
 
@@ -325,7 +327,7 @@ async def serve(host='0.0.0.0', port='8000', backlog=5, enable_cors=True):
     )
 
 
-async def send(writer, response):
+async def send(writer, response, close=True):
     if DEBUG:
         print('sending response: {}'.format(response))
     writer.write('HTTP/1.1 {} OK\n'.format(response.status_int).encode())
@@ -351,8 +353,10 @@ async def send(writer, response):
                     break
                 writer.write(chunk_mv[:num_bytes])
                 await writer.drain()
-    writer.close()
-    await writer.wait_closed()
+    # Maybe close the writer.
+    if close:
+        writer.close()
+        await writer.wait_closed()
 
 
 ###############################################################################
@@ -391,6 +395,28 @@ def route(path_pattern, methods=('GET',), query_param_parser_map=None):
 
     return decorator
 
+def as_event_source(func):
+    """A route handler wrapper to initialize an even source connection and pass
+    a sender function to the handler.
+    """
+    async def wrapper(request, *args, **kwargs):
+        # Send the event source response headers and keep the connection
+        # open.
+        res = Response(200, headers={
+            'cache-control': 'no-cache',
+            'content-type': 'text/event-stream'
+        })
+        await send(request.writer, res, close=False)
+        # Define a sender function that encodes and writes the data to the
+        # event stream.
+        writer = request.writer
+        async def sender(data):
+            writer.write(
+                f'data: {json.dumps(data)}\n\n'.encode('utf-8')
+            )
+            await writer.drain()
+        return await func(request, sender, *args, **kwargs)
+    return wrapper
 
 def as_json(func):
     """A request handler decorator that JSON-encodes the Response body and sets
