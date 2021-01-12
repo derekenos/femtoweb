@@ -1,8 +1,8 @@
 
 from unittest import TestCase
 
-import server
-from server import (
+from femtoweb import server
+from femtoweb.server import (
     CouldNotParse,
     as_choice,
     as_nonempty,
