@@ -43,7 +43,7 @@ Hello from femtoweb!
 
 ## The Features
 
-### routing
+### Request Routing
 
 Registering a function as the handler for requests to a certain URL path is accomplished using the [route](https://github.com/derekenos/femtoweb/blob/master/server.py#L366) decorator.
 
