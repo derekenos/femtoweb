@@ -99,6 +99,9 @@ class _503(ErrorResponse):
 
 DEBUG = False
 
+HTTP_DELIM = b'\r\n'
+
+# Content Types
 APPLICATION_JAVASCRIPT = 'application/javascript'
 APPLICATION_JSON = 'application/json'
 APPLICATION_OCTET_STREAM = 'application/octet-stream'
@@ -110,6 +113,7 @@ IMAGE_PNG = 'image/png'
 TEXT_CSS = 'text/css'
 TEXT_HTML = 'text/html'
 TEXT_PLAIN = 'text/plain'
+TEXT_EVENT_STREAM = 'text/event-stream'
 
 FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP = {
     'css': TEXT_CSS,
@@ -134,7 +138,6 @@ GET = 'GET'
 POST = 'POST'
 PUT = 'PUT'
 
-
 ###############################################################################
 # Exceptions
 ###############################################################################
@@ -145,14 +148,12 @@ class ShortRead(HTTPServerException): pass
 class ZeroRead(HTTPServerException): pass
 class CouldNotParse(HTTPServerException): pass
 
-
 ###############################################################################
 # Query Parameter Parsers
 ###############################################################################
 
 def parsing_error():
     raise CouldNotParse
-
 
 def as_type(t):
     def f(x):
@@ -165,17 +166,14 @@ def as_type(t):
             parsing_error()
     return f
 
-
 def as_choice(*choices):
     return lambda x: x if x in choices else parsing_error()
-
 
 def as_nonempty(parser):
     def f(x):
         x = parser(x)
         return x if len(x) > 0 else parsing_error()
     return f
-
 
 def with_default_as(parser, default):
     def f(x):
@@ -185,7 +183,6 @@ def with_default_as(parser, default):
             return default
     return f
 
-
 def maybe_as(parser):
     def f(x):
         try:
@@ -194,16 +191,29 @@ def maybe_as(parser):
             return x if x is None else parsing_error()
     return f
 
-
 ###############################################################################
 # Utility Functions
 ###############################################################################
 
-HTTP_DELIM = b'\r\n'
-
-
 _decode = lambda b: b.decode('ISO-8859-1')
 
+get_file_extension_content_type = \
+    lambda ext: FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP.get(ext.lower(), None)
+
+def get_file_path_content_type(fs_path):
+    # Attempt to greedily match (i.e. the extension with the most segments) the
+    # filename extension to a content type.
+    splits = fs_path.rsplit('.', MAX_FILE_EXTENSION_SEGMENTS)
+    num_segs = len(splits) - 1
+    while num_segs > 0:
+        ext = '.'.join(splits[-num_segs:])
+        content_type = get_file_extension_content_type(ext)
+        if content_type is not None:
+            return content_type
+        num_segs -= 1
+    # Filename didn't match any definde content type so return the default
+    # 'application/octet-stream'.
+    return APPLICATION_OCTET_STREAM
 
 def parse_uri(uri):
     if '?' not in uri:
@@ -223,7 +233,6 @@ def parse_uri(uri):
             if DEBUG:
                 print('Unparsable query param: "{}"'.format(pair_str))
     return path, query
-
 
 async def parse_request(reader, writer):
     # Get the first 1024 bytes
@@ -274,60 +283,27 @@ async def parse_request(reader, writer):
         body=body,
     )
 
-get_file_extension_content_type = \
-    lambda ext: FILE_LOWER_EXTENSION_CONTENT_TYPE_MAP.get(ext.lower(), None)
-
-def get_file_path_content_type(fs_path):
-    # Attempt to greedily match (i.e. the extension with the most segments) the
-    # filename extension to a content type.
-    splits = fs_path.rsplit('.', MAX_FILE_EXTENSION_SEGMENTS)
-    num_segs = len(splits) - 1
-    while num_segs > 0:
-        ext = '.'.join(splits[-num_segs:])
-        content_type = get_file_extension_content_type(ext)
-        if content_type is not None:
-            return content_type
-        num_segs -= 1
-    # Filename didn't match any definde content type so return the default
-    # 'application/octet-stream'.
-    return APPLICATION_OCTET_STREAM
-
+def parse_query_params(request, parser_map):
+    """Apply parsers to the request query params.
+    """
+    query = request.query
+    ok_params = {}
+    bad_params = {}
+    for k, parser in parser_map.items():
+        v = query.get(k)
+        try:
+            ok_params[k] = parser(v)
+        except CouldNotParse:
+            bad_params[k] = v
+    return ok_params, bad_params
 
 ###############################################################################
 # Connection Handling
 ###############################################################################
 
-async def service_connection(reader, writer):
-    try:
-        request = await parse_request(reader, writer)
-        if DEBUG:
-            print('request: {}'.format(request))
-        await dispatch(request)
-    except KeyboardInterrupt:
-        writer.close()
-        await writer.wait_closed()
-        raise
-    except Exception as e:
-        print_exc()
-        try:
-            await send(writer, _500(str(e)))
-        except Exception:
-            print_exc()
-        writer.close()
-        await writer.wait_closed()
-
-
-async def serve(host='0.0.0.0', port='8000', backlog=5, enable_cors=True):
-    Response.CORS_ENABLED = enable_cors
-    return await asyncio.start_server(
-        service_connection,
-        host,
-        port,
-        backlog=backlog
-    )
-
-
 async def send(writer, response, close=True):
+    """Write a response to writer stream.
+    """
     if DEBUG:
         print('sending response: {}'.format(response))
     writer.write('HTTP/1.1 {} OK\n'.format(response.status_int).encode())
@@ -358,6 +334,37 @@ async def send(writer, response, close=True):
         writer.close()
         await writer.wait_closed()
 
+async def service_connection(reader, writer):
+    """Handle a new server connection.
+    """
+    try:
+        request = await parse_request(reader, writer)
+        if DEBUG:
+            print('request: {}'.format(request))
+        await dispatch(request)
+    except KeyboardInterrupt:
+        writer.close()
+        await writer.wait_closed()
+        raise
+    except Exception as e:
+        print_exc()
+        try:
+            await send(writer, _500(str(e)))
+        except Exception:
+            print_exc()
+        writer.close()
+        await writer.wait_closed()
+
+async def serve(host='0.0.0.0', port='8000', backlog=5, enable_cors=True):
+    """Start the webserver.
+    """
+    Response.CORS_ENABLED = enable_cors
+    return await asyncio.start_server(
+        service_connection,
+        host,
+        port,
+        backlog=backlog
+    )
 
 ###############################################################################
 # Routing
@@ -395,71 +402,6 @@ def route(path_pattern, methods=('GET',), query_param_parser_map=None):
 
     return decorator
 
-def as_event_source(func):
-    """A route handler wrapper to initialize an even source connection and pass
-    a sender function to the handler.
-    """
-    async def wrapper(request, *args, **kwargs):
-        # Send the event source response headers and keep the connection
-        # open.
-        res = Response(200, headers={
-            'cache-control': 'no-cache',
-            'content-type': 'text/event-stream'
-        })
-        await send(request.writer, res, close=False)
-        # Define a sender function that encodes and writes the data to the
-        # event stream.
-        writer = request.writer
-        async def sender(data):
-            writer.write(
-                f'data: {json.dumps(data)}\n\n'.encode('utf-8')
-            )
-            await writer.drain()
-        return await func(request, sender, *args, **kwargs)
-    return wrapper
-
-def as_json(func):
-    """A request handler decorator that JSON-encodes the Response body and sets
-    the Content-Type to "application/json".
-    """
-    async def wrapper(*args, **kwargs):
-        response = await func(*args, **kwargs)
-        response.body = json.dumps(response.body)
-        response.headers['content-type'] = 'application/json'
-        return response
-    return wrapper
-
-
-def parse_json_body(func):
-    """A request handler decorator that attempts to parse a JSON-encoded
-    request body and pass it as an argument to the handler.
-    """
-    async def wrapper(request, *args, **kwargs):
-        if request.headers.get('content-type') != APPLICATION_JSON:
-            return _400('Expected Content-Type: {}'.format(APPLICATION_JSON))
-        try:
-            data = json.loads(request.body)
-        except Exception:
-            return _400('Could not parse request body as JSON')
-        return await func(request, data, *args, **kwargs)
-    return wrapper
-
-
-def parse_query_params(request, parser_map):
-    """Apply parsers to the request query params.
-    """
-    query = request.query
-    ok_params = {}
-    bad_params = {}
-    for k, parser in parser_map.items():
-        v = query.get(k)
-        try:
-            ok_params[k] = parser(v)
-        except CouldNotParse:
-            bad_params[k] = v
-    return ok_params, bad_params
-
-
 async def dispatch(request):
     """Attempt to find and invoke the handler for the specified request path
     and return a bool indicating whether a handler was found.
@@ -492,6 +434,61 @@ async def dispatch(request):
         # Otherwise, send a Not-Found respose.
         await send(request.writer, _404())
 
+###############################################################################
+# Request Handler Decorators
+###############################################################################
+
+def event_source(func):
+    """A request handler wrapper to initialize an event source connection and pass
+    a sender function to the handler.
+    """
+    async def wrapper(request, *args, **kwargs):
+        # Send the event source response headers and keep the connection
+        # open.
+        res = Response(200, headers={
+            'cache-control': 'no-cache',
+            'content-type': TEXT_EVENT_STREAM
+        })
+        await send(request.writer, res, close=False)
+        # Define a sender function that encodes and writes the data to the
+        # event stream.
+        writer = request.writer
+        async def sender(data):
+            writer.write(
+                f'data: {json.dumps(data)}\n\n'.encode('utf-8')
+            )
+            await writer.drain()
+        return await func(request, sender, *args, **kwargs)
+    return wrapper
+
+def json_request(func):
+    """A request handler decorator that attempts to parse a JSON-encoded
+    request body and pass it as an argument to the handler.
+    """
+    async def wrapper(request, *args, **kwargs):
+        if request.headers.get('content-type') != APPLICATION_JSON:
+            return _400('Expected Content-Type: {}'.format(APPLICATION_JSON))
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            return _400('Could not parse request body as JSON')
+        return await func(request, data, *args, **kwargs)
+    return wrapper
+
+def json_response(func):
+    """A request handler decorator that JSON-encodes the Response body and sets
+    the Content-Type to "application/json".
+    """
+    async def wrapper(*args, **kwargs):
+        response = await func(*args, **kwargs)
+        response.body = json.dumps(response.body)
+        response.headers['content-type'] = 'application/json'
+        return response
+    return wrapper
+
+###############################################################################
+# CLI
+###############################################################################
 
 # Run the server if executed as a script.
 if __name__ == '__main__':

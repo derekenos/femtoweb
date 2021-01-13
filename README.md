@@ -5,8 +5,8 @@ femtoweb is an asynchronous Python HTTP server and web application framework tha
 ## Branches and their compatibility
 
 | branch | pairs well with |
-| --- | --- | 
-| [master](https://github.com/derekenos/femtoweb/tree/master) | Python 3.7 |
+| --- | --- |
+| [master](https://github.com/derekenos/femtoweb/tree/master) | Python 3.9 |
 | [micropython](https://github.com/derekenos/femtoweb/tree/micropython) | Micropython 1.13 |
 
 
@@ -14,7 +14,7 @@ femtoweb is an asynchronous Python HTTP server and web application framework tha
 
 Executing `serve.py` is just like executing `server.py` but with filesystem endpoints attached.
 ```
-python3.7 serve.py
+python3.9 serve.py
 ```
 
 If all goes well, when you point a web browser at `localhost:8000` you'll see the text:
@@ -90,7 +90,7 @@ For example, if you define:
 @route('.*', methods=(GET,))
 async def catchall(request):
     ...
-    
+
 @route('/', methods=(GET, POST))
 async def home(request):
     ...
@@ -110,18 +110,62 @@ async def home_POST(request):
     ...
 ```
 
-### as_json
+### Request Handler Decorators
 
-You can use the [`as_json` decorator](https://github.com/derekenos/femtoweb/blob/master/server.py#L395) in conjunction with `route` to automatically encode the `Response.body` as JSON, e.g.:
+#### event_source
+
+The [`event_source`](https://github.com/derekenos/femtoweb/blob/master/server.py#L441) decorator
+initiates an [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) connection and passes an event emitter function as an argument to the request handler. Note that the handler must return `None` instead of the normal Response object, otherwise the connection will be closed.
+
+Example:
+
+```
+@route('/events', methods=(GET,))
+@event_source
+async def events(request, emitter):
+    n = 0
+    while True:
+        await emitter(n)
+        n += 1
+        await asyncio.sleep(1)
+```
+
+This handler will emit an incremented number each second.
+
+To receive and view these events in a web browser, open the dev console and enter:
+
+```
+new EventSource('/events').onmessage = event => console.log(event.data)
+```
+
+You should see the count printed to the console, i.e.
+
+```
+0
+1
+2
+3
+...
+```
+
+This example is implemented in [serve.py](https://github.com/derekenos/femtoweb/blob/master/serve.py).
+
+#### json_response
+
+The [`json_response`](https://github.com/derekenos/femtoweb/blob/master/server.py#L464) decorator will automatically encode the response as JSON.
+
+Example:
 
 ```
 @route('/time', methods=(GET,))
-@as_json
+@json_response
 async def get_time(request):
    return _200(body={'currentTime': datetime.now().isoformat()})
 ```
 
 This will make the `/time` endpoint respond with the body `{"currentTime": "2019-10-16T20:49:22.543090"}` and `Content-Type: application/json`.
+
+This example is implemented in [serve.py](https://github.com/derekenos/femtoweb/blob/master/serve.py).
 
 
 ### File Operations
@@ -162,4 +206,3 @@ curl `http://localhost:8000/_fs/file.txt
 # Delete a file
 curl -X DELETE `http://localhost:8000/_fs/file.txt
 ```
-
