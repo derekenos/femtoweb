@@ -6,7 +6,7 @@ femtoweb is an asynchronous Python HTTP server and web application framework tha
 
 | branch | pairs well with |
 | --- | --- |
-| [master](https://github.com/derekenos/femtoweb/tree/master) | Python 3.7 |
+| [master](https://github.com/derekenos/femtoweb/tree/master) | Python 3.9 |
 | [micropython](https://github.com/derekenos/femtoweb/tree/micropython) | Micropython 1.13 |
 
 
@@ -14,7 +14,7 @@ femtoweb is an asynchronous Python HTTP server and web application framework tha
 
 Executing `serve.py` is just like executing `server.py` but with filesystem endpoints attached.
 ```
-python3.7 serve.py
+python3.9 serve.py
 ```
 
 If all goes well, when you point a web browser at `localhost:8000` you'll see the text:
@@ -115,7 +115,7 @@ async def home_POST(request):
 #### event_source
 
 The [`event_source`](https://github.com/derekenos/femtoweb/blob/master/server.py#L441) decorator
-initiates an [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) connection and passes an event emitter function as an argument to the request handler. Note that the handler must return `None` instead of a normal Response object in order to prevent the connection from being closed.
+initiates an [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) connection and passes an event emitter function as an argument to the request handler. Note that the handler must return `None` instead of the normal Response object, otherwise the connection will be closed.
 
 Example:
 
