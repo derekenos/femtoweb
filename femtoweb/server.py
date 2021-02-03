@@ -99,7 +99,7 @@ class _503(ErrorResponse):
 
 DEBUG = False
 
-HTTP_DELIM = b'\r\n'
+CRLF = b'\r\n'
 
 # Content Types
 APPLICATION_JAVASCRIPT = 'application/javascript'
@@ -234,44 +234,34 @@ def parse_uri(uri):
                 print('Unparsable query param: "{}"'.format(pair_str))
     return path, query
 
-async def parse_request(reader, writer):
-    # Get the first 1024 bytes
-    data = await reader.read(1024)
-    if not data:
-        raise ZeroRead
+async def next_line(reader):
+    """Given a request reader, return the bytes up to, but excluding,
+    the next CRLF (i.e. b'\r\n') delimiter.
+    """
+    try:
+        return (await reader.readuntil(CRLF))[:-2]
+    except asyncio.IncompleteReadError:
+        raise ShortRead
 
-    # Consume the request line
-    request_line, data = data.split(HTTP_DELIM, 1)
+async def parse_request(reader, writer):
+    # Parse the request line.
+    try:
+        request_line = await next_line(reader)
+    except ShortRead:
+        raise ZeroRead
     method, uri, protocol_version = _decode(request_line).split()
     path, query = parse_uri(uri)
 
     # Parse the headers.
     headers = {}
-    start_idx = 0
-    end_idx = None
     while True:
-        # Find the next delimiter index
-        delim_idx = data[start_idx:].find(HTTP_DELIM)
-        if delim_idx == -1:
-            # No delimiter was found which probably indicates that our initial
-            # read was a short one, so, for now, raise an exception and we can
-            # come back later and do more reading if necessary.
-            raise ShortRead
-
-        end_idx = start_idx + delim_idx
-
-        if delim_idx == 0:
-            # We've reached the double CRLF chars that signal the end od the
-            # header, so return the headers map and the rest of data as the
-            # request body.
-            body = data[end_idx + 2:]
+        data = await next_line(reader)
+        if data == b'':
+            # Reached double-CRLF which signals the end of the headers.
             break
-
-        # Delimiter found so parse the header key/value pair, lowercasing the
-        # header name for internal consistency.
-        k, v = _decode(data[start_idx : start_idx + delim_idx]).split(':', 1)
+        k, v = _decode(data).split(':', 1)
+        # Lowercase the header names for internal consistency.
         headers[k.strip().lower()] = v.strip()
-        start_idx = end_idx + 2
 
     return Request(
         reader=reader,
@@ -280,7 +270,7 @@ async def parse_request(reader, writer):
         path=path,
         query=query,
         headers=headers,
-        body=body,
+        body=reader,
     )
 
 def parse_query_params(request, parser_map):
