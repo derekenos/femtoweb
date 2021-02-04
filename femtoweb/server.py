@@ -21,6 +21,91 @@ Request = namedtuple('Request', (
     'body',
 ))
 
+class Headers:
+    """A minimal implementation of the EmailMessage class used to implement the
+    built-in HTTPResponse.headers.
+    See: https://docs.python.org/3/library/email.message.html#email.message.EmailMessage
+    """
+    def __init__(self, headers=None):
+        if headers is not None:
+            self.headers = (
+                list(headers.items()) if isinstance(headers, dict) else headers
+            )
+
+    def __repr__(self):
+        return repr(dict(self.headers))
+
+    def __len__(self):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.__len__
+        return len(self.headers)
+
+    def __contains__(self, k):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.__contains__
+        k = k.lower()
+        return any(_k.lower() == k for _k, _ in self.headers)
+
+    def __getitem__(self, k, default=None):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.__getitem__
+        k = k.lower()
+        for _k, v in self.headers:
+            if _k.lower() == k:
+                return v
+        return None
+
+    def __setitem__(self, k, v):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.__setitem__
+        self.headers.append((k, v))
+
+    def __delitem_(self, k):
+# https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.__delitem__
+        k = k.lower()
+        self.headers = [kv for kv in self.headers if kv[0].lower() != k]
+
+    def __iter__(self):
+        return self.headers
+
+    def keys(self):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.keys
+        return [kv[0] for kv in self.headers]
+
+    def values(self):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.values
+        return [kv[1] for kv in self.headers]
+
+    def get(self, k, default=None):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.get
+        return self[k] if k in self else default
+
+    def get_all(self, k, default):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.get_all
+        k = k.lower()
+        vals = [v for _k, v in self.headers if _k.lower() == k]
+        return vals or default
+
+    def add_header(self, k, v, **params):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.add_header
+        if params:
+            raise NotImplemented
+        self.headers.append((k.replace('_', '-'), v))
+
+    def replace_header(self, k, v):
+        # https://docs.python.org/3/library/email.message.html#email.message.EmailMessage.replace_header
+        k = k.lower()
+        for i, (_k, _) in enumerate(self.headers):
+            if _k.lower() == k:
+                self.headers[i] = (_k, v)
+                return
+        raise KeyError
+
+    def update(self, _dict):
+        # Not implemented by EmailMessage.
+        # Append the dict items to self.headers.
+        self.headers.extend(_dict.items())
+
+    def items(self):
+        # Not implemented by EmailMessage.
+        yield from self.headers
+
 DEFAULT_RESPONSE_HEADERS = {
     'content-type': 'text/html',
     'connection': 'close',
@@ -33,19 +118,33 @@ class Response():
         if status_int is not None:
             self.status_int = status_int
 
-        _headers = DEFAULT_RESPONSE_HEADERS.copy()
+        # Init a default Headers object.
+        _headers = Headers(DEFAULT_RESPONSE_HEADERS)
 
         if self.CORS_ENABLED:
             _headers['access-control-allow-origin'] = '*'
 
+        # Set any subclass-specified headers.
         if hasattr(self, 'headers'):
-            _headers.update(self.headers)
-        if headers is not None:
-            _headers.update(headers)
-        self.headers = _headers
+            for k, v in self.headers.items():
+                if k in _headers:
+                    _headers.replace_header(k, v)
+                else:
+                    _headers[k] = v
 
+        # Set any argument-specified headers.
+        if headers is not None:
+            for k, v in headers.items():
+                if k in _headers:
+                    _headers.replace_header(k, v)
+                else:
+                    _headers[k] = v
+
+        self.headers = _headers
         self.body = body
 
+    def __repr__(self):
+        return repr(self.__dict__)
 
 class _200(Response):
     status_int = 200
